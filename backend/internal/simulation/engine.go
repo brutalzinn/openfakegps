@@ -237,6 +237,45 @@ func (e *Engine) ClearDeviceID(simID string) error {
 	return nil
 }
 
+// SetPosition manually sets the current position of a simulation and pushes it to the device.
+// Works only when the simulation is Running or Paused.
+func (e *Engine) SetPosition(id string, lat, lon, speed, bearing float64) (*Position, error) {
+	e.mu.RLock()
+	sim, ok := e.simulations[id]
+	e.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("simulation %q not found", id)
+	}
+
+	sim.mu.Lock()
+	if sim.State != StateRunning && sim.State != StatePaused {
+		state := sim.State
+		sim.mu.Unlock()
+		return nil, fmt.Errorf("simulation %q is %s; must be running or paused", id, state)
+	}
+
+	pos := Position{
+		Lat:       lat,
+		Lon:       lon,
+		Speed:     speed,
+		Bearing:   bearing,
+		Accuracy:  0,
+		Altitude:  sim.CurrentPos.Altitude,
+		Timestamp: time.Now(),
+	}
+	sim.CurrentPos = pos
+
+	simID := sim.Config.ID
+	deviceID := sim.DeviceID
+	sim.mu.Unlock()
+
+	if e.callback != nil && deviceID != "" {
+		e.callback(simID, deviceID, pos)
+	}
+
+	return &pos, nil
+}
+
 // runLoop is the main tick loop for a simulation, running in its own goroutine.
 func (e *Engine) runLoop(ctx context.Context, sim *Simulation) {
 	defer func() {

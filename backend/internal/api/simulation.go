@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/openfakegps/openfakegps/backend/internal/simulation"
@@ -161,4 +162,57 @@ func (s *Server) stopSimulation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "stopped"})
+}
+
+type setPositionRequest struct {
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+	Speed   float64 `json:"speed"`
+	Heading float64 `json:"heading"`
+}
+
+func (s *Server) setPosition(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var req setPositionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	if req.Lat < -90 || req.Lat > 90 {
+		writeError(w, http.StatusBadRequest, "lat must be between -90 and 90")
+		return
+	}
+	if req.Lon < -180 || req.Lon > 180 {
+		writeError(w, http.StatusBadRequest, "lon must be between -180 and 180")
+		return
+	}
+	if req.Speed < 0 {
+		writeError(w, http.StatusBadRequest, "speed must be >= 0")
+		return
+	}
+	if req.Heading < 0 || req.Heading >= 360 {
+		writeError(w, http.StatusBadRequest, "heading must be >= 0 and < 360")
+		return
+	}
+
+	pos, err := s.engine.SetPosition(id, req.Lat, req.Lon, req.Speed, req.Heading)
+	if err != nil {
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "not found"):
+			writeError(w, http.StatusNotFound, msg)
+		case strings.Contains(msg, "must be running or paused"):
+			writeError(w, http.StatusConflict, msg)
+		default:
+			writeError(w, http.StatusBadRequest, msg)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":      "position_set",
+		"current_pos": pos,
+	})
 }

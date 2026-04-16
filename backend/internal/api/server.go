@@ -39,6 +39,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/simulations/{id}/pause", s.pauseSimulation)
 	mux.HandleFunc("POST /api/v1/simulations/{id}/resume", s.resumeSimulation)
 	mux.HandleFunc("POST /api/v1/simulations/{id}/stop", s.stopSimulation)
+	mux.HandleFunc("POST /api/v1/simulations/{id}/position", s.setPosition)
 
 	// Device routes.
 	mux.HandleFunc("GET /api/v1/devices", s.listDevices)
