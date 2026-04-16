@@ -1,0 +1,394 @@
+openapi: "3.0.3"
+info:
+  title: OpenFakeGPS API
+  description: REST API for controlling GPS simulations on Android devices.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+paths:
+  /simulations:
+    post:
+      summary: Create simulation
+      operationId: createSimulation
+      tags: [Simulations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSimulationRequest"
+      responses:
+        "201":
+          description: Simulation created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: "a1b2c3d4"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      summary: List all simulations
+      operationId: listSimulations
+      tags: [Simulations]
+      responses:
+        "200":
+          description: List of simulations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatusInfo"
+
+  /simulations/{id}:
+    get:
+      summary: Get simulation status
+      operationId: getSimulation
+      tags: [Simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimulationID"
+      responses:
+        "200":
+          description: Simulation details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /simulations/{id}/start:
+    post:
+      summary: Start simulation
+      operationId: startSimulation
+      tags: [Simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimulationID"
+      responses:
+        "200":
+          description: Simulation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /simulations/{id}/pause:
+    post:
+      summary: Pause simulation
+      operationId: pauseSimulation
+      tags: [Simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimulationID"
+      responses:
+        "200":
+          description: Simulation paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /simulations/{id}/resume:
+    post:
+      summary: Resume simulation
+      operationId: resumeSimulation
+      tags: [Simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimulationID"
+      responses:
+        "200":
+          description: Simulation resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /simulations/{id}/stop:
+    post:
+      summary: Stop simulation
+      operationId: stopSimulation
+      tags: [Simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimulationID"
+      responses:
+        "200":
+          description: Simulation stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /devices:
+    get:
+      summary: List connected devices
+      operationId: listDevices
+      tags: [Devices]
+      responses:
+        "200":
+          description: List of devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeviceInfo"
+
+  /devices/{id}:
+    get:
+      summary: Get device details
+      operationId: getDevice
+      tags: [Devices]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Device details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /assignments:
+    post:
+      summary: Assign simulation to device
+      operationId: assignSimulation
+      tags: [Assignments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sim_id, device_id]
+              properties:
+                sim_id:
+                  type: string
+                device_id:
+                  type: string
+      responses:
+        "200":
+          description: Assignment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: assigned
+                  sim_id:
+                    type: string
+                  device_id:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /assignments/auto:
+    post:
+      summary: Auto-assign simulation to idle device
+      operationId: autoAssign
+      tags: [Assignments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sim_id]
+              properties:
+                sim_id:
+                  type: string
+      responses:
+        "200":
+          description: Auto-assignment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: assigned
+                  sim_id:
+                    type: string
+                  device_id:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+components:
+  parameters:
+    SimulationID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: started
+
+    CreateSimulationRequest:
+      type: object
+      description: "Provide either 'route' (array of lat/lon) or 'polyline' (Google encoded polyline string), not both."
+      properties:
+        route:
+          type: array
+          description: "Array of waypoints (mutually exclusive with polyline)"
+          items:
+            type: object
+            required: [lat, lon]
+            properties:
+              lat:
+                type: number
+                format: double
+                example: -23.5505
+              lon:
+                type: number
+                format: double
+                example: -46.6333
+        polyline:
+          type: string
+          description: "Google encoded polyline string (mutually exclusive with route). See https://developers.google.com/maps/documentation/utilities/polylinealgorithm"
+          example: "~ps|CdezgGfApAbMbAq@"
+        speed_mps:
+          type: number
+          format: double
+          description: Speed in meters per second (mutually exclusive with speed_kmh)
+          example: 13.8
+        speed_kmh:
+          type: number
+          format: double
+          description: Speed in km/h (mutually exclusive with speed_mps, converted to m/s internally)
+          example: 50.0
+        update_interval:
+          type: string
+          description: Duration between updates (Go duration format)
+          example: "1s"
+        noise_meters:
+          type: number
+          format: double
+          description: GPS noise radius in meters
+          example: 2.0
+        stops:
+          type: array
+          items:
+            type: object
+            properties:
+              waypoint_index:
+                type: integer
+              duration:
+                type: string
+                example: "30s"
+
+    StatusInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+          enum: [created, running, paused, stopped]
+        device_id:
+          type: string
+        current_pos:
+          $ref: "#/components/schemas/Position"
+        progress:
+          type: number
+          format: double
+          description: Progress from 0.0 to 1.0
+
+    Position:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        speed:
+          type: number
+          format: double
+          description: Speed in m/s
+        bearing:
+          type: number
+          format: double
+          description: Degrees
+        accuracy:
+          type: number
+          format: double
+          description: Meters
+        altitude:
+          type: number
+          format: double
+        timestamp:
+          type: string
+          format: date-time
+
+    DeviceInfo:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        device_name:
+          type: string
+        model:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [idle, assigned, simulating, disconnected]
+        assigned_sim:
+          type: string
+        last_seen:
+          type: string
+          format: date-time

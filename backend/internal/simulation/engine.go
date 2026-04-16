@@ -1,0 +1,285 @@
+package simulation
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// LocationCallback is invoked each tick with the new position for a simulation.
+type LocationCallback func(simID, deviceID string, pos Position)
+
+// Engine manages the lifecycle of all simulations.
+type Engine struct {
+	mu          sync.RWMutex
+	simulations map[string]*Simulation
+	callback    LocationCallback
+}
+
+// NewEngine creates a new simulation engine with the given location callback.
+func NewEngine(cb LocationCallback) *Engine {
+	return &Engine{
+		simulations: make(map[string]*Simulation),
+		callback:    cb,
+	}
+}
+
+// CreateSimulation validates the config and stores a new simulation.
+func (e *Engine) CreateSimulation(cfg Config) (*Simulation, error) {
+	if len(cfg.Route) < 2 {
+		return nil, fmt.Errorf("route must have at least 2 waypoints, got %d", len(cfg.Route))
+	}
+
+	if cfg.ID == "" {
+		cfg.ID = uuid.New().String()
+	}
+	if cfg.SpeedMps <= 0 {
+		cfg.SpeedMps = 13.8 // ~50 km/h
+	}
+	if cfg.UpdateInterval <= 0 {
+		cfg.UpdateInterval = time.Second
+	}
+	if cfg.NoiseMeters <= 0 {
+		cfg.NoiseMeters = 2.0
+	}
+
+	sim := &Simulation{
+		Config: cfg,
+		State:  StateCreated,
+		CurrentPos: Position{
+			Lat:       cfg.Route[0].Lat,
+			Lon:       cfg.Route[0].Lon,
+			Timestamp: time.Now(),
+		},
+		done: make(chan struct{}),
+	}
+
+	e.mu.Lock()
+	e.simulations[cfg.ID] = sim
+	e.mu.Unlock()
+
+	return sim, nil
+}
+
+// StartSimulation begins ticking the simulation identified by id.
+func (e *Engine) StartSimulation(id string) error {
+	e.mu.RLock()
+	sim, ok := e.simulations[id]
+	e.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("simulation %q not found", id)
+	}
+
+	sim.mu.Lock()
+	if sim.State == StateRunning {
+		sim.mu.Unlock()
+		return fmt.Errorf("simulation %q is already running", id)
+	}
+	if sim.State == StateStopped {
+		sim.mu.Unlock()
+		return fmt.Errorf("simulation %q is stopped and cannot be restarted", id)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sim.cancel = cancel
+	sim.State = StateRunning
+	sim.done = make(chan struct{})
+	sim.mu.Unlock()
+
+	go e.runLoop(ctx, sim)
+	return nil
+}
+
+// PauseSimulation pauses a running simulation.
+func (e *Engine) PauseSimulation(id string) error {
+	e.mu.RLock()
+	sim, ok := e.simulations[id]
+	e.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("simulation %q not found", id)
+	}
+
+	sim.mu.Lock()
+	defer sim.mu.Unlock()
+
+	if sim.State != StateRunning {
+		return fmt.Errorf("simulation %q is not running (state: %s)", id, sim.State)
+	}
+
+	sim.State = StatePaused
+	if sim.cancel != nil {
+		sim.cancel()
+	}
+	<-sim.done
+	return nil
+}
+
+// ResumeSimulation resumes a paused simulation.
+func (e *Engine) ResumeSimulation(id string) error {
+	e.mu.RLock()
+	sim, ok := e.simulations[id]
+	e.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("simulation %q not found", id)
+	}
+
+	sim.mu.Lock()
+	if sim.State != StatePaused {
+		sim.mu.Unlock()
+		return fmt.Errorf("simulation %q is not paused (state: %s)", id, sim.State)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sim.cancel = cancel
+	sim.State = StateRunning
+	sim.done = make(chan struct{})
+	sim.mu.Unlock()
+
+	go e.runLoop(ctx, sim)
+	return nil
+}
+
+// StopSimulation permanently stops a simulation.
+func (e *Engine) StopSimulation(id string) error {
+	e.mu.RLock()
+	sim, ok := e.simulations[id]
+	e.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("simulation %q not found", id)
+	}
+
+	sim.mu.Lock()
+	prevState := sim.State
+	sim.State = StateStopped
+	if sim.cancel != nil {
+		sim.cancel()
+	}
+	sim.mu.Unlock()
+
+	// Wait for the loop to finish if it was running.
+	if prevState == StateRunning {
+		<-sim.done
+	}
+	return nil
+}
+
+// GetSimulation returns a status snapshot for the given simulation.
+func (e *Engine) GetSimulation(id string) (*StatusInfo, error) {
+	e.mu.RLock()
+	sim, ok := e.simulations[id]
+	e.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("simulation %q not found", id)
+	}
+
+	sim.mu.RLock()
+	defer sim.mu.RUnlock()
+
+	return &StatusInfo{
+		ID:         sim.Config.ID,
+		State:      sim.State.String(),
+		DeviceID:   sim.DeviceID,
+		CurrentPos: sim.CurrentPos,
+		Progress:   progress(sim),
+	}, nil
+}
+
+// ListSimulations returns status snapshots for all simulations.
+func (e *Engine) ListSimulations() []StatusInfo {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	list := make([]StatusInfo, 0, len(e.simulations))
+	for _, sim := range e.simulations {
+		sim.mu.RLock()
+		list = append(list, StatusInfo{
+			ID:         sim.Config.ID,
+			State:      sim.State.String(),
+			DeviceID:   sim.DeviceID,
+			CurrentPos: sim.CurrentPos,
+			Progress:   progress(sim),
+		})
+		sim.mu.RUnlock()
+	}
+	return list
+}
+
+// SetDeviceID assigns a device to a simulation.
+func (e *Engine) SetDeviceID(simID, deviceID string) error {
+	e.mu.RLock()
+	sim, ok := e.simulations[simID]
+	e.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("simulation %q not found", simID)
+	}
+
+	sim.mu.Lock()
+	sim.DeviceID = deviceID
+	sim.mu.Unlock()
+	return nil
+}
+
+// ClearDeviceID removes the device assignment from a simulation.
+func (e *Engine) ClearDeviceID(simID string) error {
+	e.mu.RLock()
+	sim, ok := e.simulations[simID]
+	e.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("simulation %q not found", simID)
+	}
+
+	sim.mu.Lock()
+	sim.DeviceID = ""
+	sim.mu.Unlock()
+	return nil
+}
+
+// runLoop is the main tick loop for a simulation, running in its own goroutine.
+func (e *Engine) runLoop(ctx context.Context, sim *Simulation) {
+	defer func() {
+		close(sim.done)
+	}()
+
+	ticker := time.NewTicker(sim.Config.UpdateInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sim.mu.Lock()
+			if sim.State != StateRunning {
+				sim.mu.Unlock()
+				return
+			}
+
+			pos := advancePosition(sim, sim.Config.UpdateInterval)
+			pos = addNoise(pos, sim.Config.NoiseMeters)
+			sim.CurrentPos = pos
+
+			simID := sim.Config.ID
+			deviceID := sim.DeviceID
+
+			// Check if we reached the end of the route.
+			if sim.waypointIdx >= len(sim.Config.Route)-1 {
+				sim.State = StateStopped
+				sim.mu.Unlock()
+
+				if e.callback != nil && deviceID != "" {
+					e.callback(simID, deviceID, pos)
+				}
+				return
+			}
+
+			sim.mu.Unlock()
+
+			if e.callback != nil && deviceID != "" {
+				e.callback(simID, deviceID, pos)
+			}
+		}
+	}
+}

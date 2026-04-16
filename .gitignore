@@ -1,0 +1,21 @@
+# Go
+backend/server
+*.exe
+*.test
+*.out
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/proto/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

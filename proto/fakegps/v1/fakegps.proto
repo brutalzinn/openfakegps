@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package fakegps.v1;
+
+option go_package = "github.com/openfakegps/openfakegps/proto/fakegps/v1;fakegpsv1";
+option java_multiple_files = true;
+option java_package = "com.openfakegps.proto.v1";
+
+// AgentService handles bidirectional streaming between backend and Android agents.
+service AgentService {
+  rpc Connect(stream AgentMessage) returns (stream ServerMessage);
+}
+
+message AgentMessage {
+  oneof payload {
+    RegisterRequest register = 1;
+    Heartbeat heartbeat = 2;
+    StatusUpdate status_update = 3;
+  }
+}
+
+message ServerMessage {
+  oneof payload {
+    RegisterResponse register_response = 1;
+    LocationUpdate location_update = 2;
+    SimulationCommand simulation_command = 3;
+  }
+}
+
+// Sent by agent on initial connection.
+message RegisterRequest {
+  string agent_id = 1;
+  string device_name = 2;
+  string device_model = 3;
+  repeated string capabilities = 4;
+}
+
+message RegisterResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+message Heartbeat {
+  int64 timestamp_ms = 1;
+}
+
+message StatusUpdate {
+  string agent_id = 1;
+  DeviceStatus status = 2;
+  string message = 3;
+}
+
+// Streamed from backend to agent with GPS coordinates.
+message LocationUpdate {
+  string simulation_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  float speed = 4;       // m/s
+  float bearing = 5;     // degrees
+  float accuracy = 6;    // meters
+  double altitude = 7;
+  int64 timestamp_ms = 8;
+}
+
+message SimulationCommand {
+  SimulationAction action = 1;
+  string simulation_id = 2;
+}
+
+enum SimulationAction {
+  SIMULATION_ACTION_UNSPECIFIED = 0;
+  SIMULATION_ACTION_START = 1;
+  SIMULATION_ACTION_STOP = 2;
+  SIMULATION_ACTION_PAUSE = 3;
+  SIMULATION_ACTION_RESUME = 4;
+}
+
+enum DeviceStatus {
+  DEVICE_STATUS_UNSPECIFIED = 0;
+  DEVICE_STATUS_IDLE = 1;
+  DEVICE_STATUS_ASSIGNED = 2;
+  DEVICE_STATUS_SIMULATING = 3;
+  DEVICE_STATUS_DISCONNECTED = 4;
+}
