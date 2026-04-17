@@ -63,7 +63,8 @@ func (e *Engine) CreateSimulation(cfg Config) (*Simulation, error) {
 			Lon:       cfg.Route[0].Lon,
 			Timestamp: time.Now(),
 		},
-		done: make(chan struct{}),
+		done:           make(chan struct{}),
+		completedStops: make(map[int]bool),
 	}
 
 	e.mu.Lock()
@@ -103,6 +104,8 @@ func (e *Engine) StartSimulation(id string) error {
 }
 
 // PauseSimulation pauses a running simulation.
+// The run loop keeps running and continues to send the current position
+// so the device maintains the mock location instead of reverting to real GPS.
 func (e *Engine) PauseSimulation(id string) error {
 	e.mu.RLock()
 	sim, ok := e.simulations[id]
@@ -119,10 +122,6 @@ func (e *Engine) PauseSimulation(id string) error {
 	}
 
 	sim.State = StatePaused
-	if sim.cancel != nil {
-		sim.cancel()
-	}
-	<-sim.done
 	return nil
 }
 
@@ -136,18 +135,13 @@ func (e *Engine) ResumeSimulation(id string) error {
 	}
 
 	sim.mu.Lock()
+	defer sim.mu.Unlock()
+
 	if sim.State != StatePaused {
-		sim.mu.Unlock()
 		return fmt.Errorf("simulation %q is not paused (state: %s)", id, sim.State)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	sim.cancel = cancel
 	sim.State = StateRunning
-	sim.done = make(chan struct{})
-	sim.mu.Unlock()
-
-	go e.runLoop(ctx, sim)
 	return nil
 }
 
@@ -168,8 +162,8 @@ func (e *Engine) StopSimulation(id string) error {
 	}
 	sim.mu.Unlock()
 
-	// Wait for the loop to finish if it was running.
-	if prevState == StateRunning {
+	// Wait for the loop to finish if it was running, paused, or completed (loop stays alive).
+	if prevState == StateRunning || prevState == StatePaused || prevState == StateCompleted {
 		<-sim.done
 	}
 	return nil
@@ -291,6 +285,21 @@ func (e *Engine) runLoop(ctx context.Context, sim *Simulation) {
 		close(sim.done)
 	}()
 
+	// Send the starting position immediately so the device updates
+	// before the first tick, avoiding a brief teleport from the old location.
+	sim.mu.Lock()
+	if sim.State == StateRunning {
+		startPos := sim.CurrentPos
+		simID := sim.Config.ID
+		deviceID := sim.DeviceID
+		sim.mu.Unlock()
+		if e.callback != nil && deviceID != "" {
+			e.callback(simID, deviceID, startPos)
+		}
+	} else {
+		sim.mu.Unlock()
+	}
+
 	ticker := time.NewTicker(sim.Config.UpdateInterval)
 	defer ticker.Stop()
 
@@ -300,27 +309,41 @@ func (e *Engine) runLoop(ctx context.Context, sim *Simulation) {
 			return
 		case <-ticker.C:
 			sim.mu.Lock()
-			if sim.State != StateRunning {
+			state := sim.State
+			if state == StateStopped {
 				sim.mu.Unlock()
 				return
+			}
+
+			simID := sim.Config.ID
+			deviceID := sim.DeviceID
+
+			if state == StatePaused || state == StateCompleted {
+				// Keep sending current position to maintain mock location on device.
+				pos := sim.CurrentPos
+				sim.mu.Unlock()
+
+				if e.callback != nil && deviceID != "" {
+					e.callback(simID, deviceID, pos)
+				}
+				continue
 			}
 
 			pos := advancePosition(sim, sim.Config.UpdateInterval)
 			pos = addNoise(pos, sim.Config.NoiseMeters)
 			sim.CurrentPos = pos
 
-			simID := sim.Config.ID
-			deviceID := sim.DeviceID
-
-			// Check if we reached the end of the route.
+			// When we reach the end of the route, switch to completed state
+			// to keep sending the final position and prevent teleporting.
 			if sim.waypointIdx >= len(sim.Config.Route)-1 {
-				sim.State = StateStopped
+				sim.State = StateCompleted
+				sim.CurrentPos.Speed = 0
 				sim.mu.Unlock()
 
 				if e.callback != nil && deviceID != "" {
 					e.callback(simID, deviceID, pos)
 				}
-				return
+				continue
 			}
 
 			sim.mu.Unlock()

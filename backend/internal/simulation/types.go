@@ -14,6 +14,7 @@ const (
 	StateRunning
 	StatePaused
 	StateStopped
+	StateCompleted // route finished, holding final position
 )
 
 // String returns a human-readable state name.
@@ -27,6 +28,8 @@ func (s State) String() string {
 		return "paused"
 	case StateStopped:
 		return "stopped"
+	case StateCompleted:
+		return "completed"
 	default:
 		return "unknown"
 	}
@@ -83,6 +86,8 @@ type Simulation struct {
 	cancel           context.CancelFunc
 	done             chan struct{}
 	prevBearing      float64
+	stopUntil        time.Time       // non-zero when holding at a stop waypoint
+	completedStops   map[int]bool    // tracks which stop waypoints have been completed
 }
 
 // StatusInfo is a snapshot of a simulation for external consumption.

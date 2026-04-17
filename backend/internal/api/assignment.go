@@ -26,6 +26,9 @@ func (s *Server) assignSimulation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Stop any active position hold on this device before assigning a simulation.
+	stopPositionHold(req.DeviceID)
+
 	if err := s.orchestrator.AssignSimulation(req.SimID, req.DeviceID); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -35,6 +38,24 @@ func (s *Server) assignSimulation(w http.ResponseWriter, r *http.Request) {
 		"status":    "assigned",
 		"sim_id":    req.SimID,
 		"device_id": req.DeviceID,
+	})
+}
+
+func (s *Server) unassignSimulation(w http.ResponseWriter, r *http.Request) {
+	simID := r.PathValue("sim_id")
+	if simID == "" {
+		writeError(w, http.StatusBadRequest, "sim_id is required")
+		return
+	}
+
+	if err := s.orchestrator.UnassignSimulation(simID); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "unassigned",
+		"sim_id": simID,
 	})
 }
 

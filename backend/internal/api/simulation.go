@@ -178,6 +178,7 @@ func (s *Server) stopSimulation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = s.orchestrator.UnassignSimulation(id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "stopped"})
 }
 

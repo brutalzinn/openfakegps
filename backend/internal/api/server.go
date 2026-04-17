@@ -44,10 +44,13 @@ func (s *Server) Routes() http.Handler {
 	// Device routes.
 	mux.HandleFunc("GET /api/v1/devices", s.listDevices)
 	mux.HandleFunc("GET /api/v1/devices/{id}", s.getDevice)
+	mux.HandleFunc("POST /api/v1/devices/position", s.setDevicePosition)
+	mux.HandleFunc("POST /api/v1/devices/position/stop", s.stopDevicePosition)
 
 	// Assignment routes.
 	mux.HandleFunc("POST /api/v1/assignments", s.assignSimulation)
 	mux.HandleFunc("POST /api/v1/assignments/auto", s.autoAssign)
+	mux.HandleFunc("DELETE /api/v1/assignments/{sim_id}", s.unassignSimulation)
 
 	// Swagger UI (served outside JSON middleware).
 	RegisterSwagger(mux)

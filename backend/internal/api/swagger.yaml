@@ -168,6 +168,118 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /devices/position:
+    post:
+      summary: Set device position directly
+      description: Send a GPS position directly to a connected device without requiring a simulation.
+      operationId: setDevicePosition
+      tags: [Devices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id, lat, lon]
+              properties:
+                device_id:
+                  type: string
+                  description: ID of the connected device
+                  example: "Pixel 4a-b2920b6a"
+                lat:
+                  type: number
+                  format: double
+                  description: Latitude (-90 to 90)
+                  example: -22.8113
+                lon:
+                  type: number
+                  format: double
+                  description: Longitude (-180 to 180)
+                  example: -43.3646
+      responses:
+        "200":
+          description: Position set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: position_set
+                  lat:
+                    type: number
+                    format: double
+                  lon:
+                    type: number
+                    format: double
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          description: Failed to send position
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /simulations/{id}/position:
+    post:
+      summary: Set simulation position manually
+      description: Override the current position of a running or paused simulation.
+      operationId: setSimulationPosition
+      tags: [Simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimulationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, lon]
+              properties:
+                lat:
+                  type: number
+                  format: double
+                  description: Latitude (-90 to 90)
+                  example: -22.8113
+                lon:
+                  type: number
+                  format: double
+                  description: Longitude (-180 to 180)
+                  example: -43.3646
+                speed:
+                  type: number
+                  format: double
+                  description: Speed in m/s
+                  example: 0
+                heading:
+                  type: number
+                  format: double
+                  description: Heading in degrees (0-359)
+                  example: 0
+      responses:
+        "200":
+          description: Position set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: position_set
+                  current_pos:
+                    $ref: "#/components/schemas/Position"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Simulation not in a valid state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /assignments:
     post:
       summary: Assign simulation to device
@@ -233,6 +345,31 @@ paths:
                     type: string
                   device_id:
                     type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /assignments/{sim_id}:
+    delete:
+      summary: Unassign simulation from device
+      operationId: unassignSimulation
+      tags: [Assignments]
+      parameters:
+        - name: sim_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Assignment removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unassigned
         "400":
           $ref: "#/components/responses/BadRequest"
 

@@ -1,8 +1,10 @@
-.PHONY: build-android install-android install-android-all launch-android build-backend run-backend docker-up docker-down clean
+.PHONY: build-android build-android-release install-android install-android-all launch-android build-backend run-backend docker-up docker-down clean
 
 # Android
 ANDROID_DIR := android
-APK := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
+APK_DEBUG := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
+APK_RELEASE := $(ANDROID_DIR)/app/build/outputs/apk/release/app-release.apk
+APK := $(APK_DEBUG)
 PACKAGE := com.openfakegps.agent
 ACTIVITY := $(PACKAGE).MainActivity
 JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
@@ -10,19 +12,23 @@ JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
 build-android:
 	cd $(ANDROID_DIR) && JAVA_HOME="$(JAVA_HOME)" ./gradlew assembleDebug
 
+build-android-release:
+	cd $(ANDROID_DIR) && JAVA_HOME="$(JAVA_HOME)" ./gradlew assembleRelease
+
 ## Install on a specific device: make install-android DEVICE=<serial>
-install-android: build-android
+## Use MODE=release for release build: make install-android MODE=release
+install-android: $(if $(filter release,$(MODE)),build-android-release,build-android)
 ifndef DEVICE
-	adb install -r $(APK)
+	adb install -r $(if $(filter release,$(MODE)),$(APK_RELEASE),$(APK_DEBUG))
 else
-	adb -s $(DEVICE) install -r $(APK)
+	adb -s $(DEVICE) install -r $(if $(filter release,$(MODE)),$(APK_RELEASE),$(APK_DEBUG))
 endif
 
 ## Install on ALL connected devices
-install-android-all: build-android
+install-android-all: $(if $(filter release,$(MODE)),build-android-release,build-android)
 	@adb devices | grep -w device | grep -v List | awk '{print $$1}' | while read serial; do \
 		echo "Installing on $$serial..."; \
-		adb -s $$serial install -r $(APK); \
+		adb -s $$serial install -r $(if $(filter release,$(MODE)),$(APK_RELEASE),$(APK_DEBUG)); \
 	done
 
 ## Launch the app on a specific device (or default)
@@ -65,12 +71,15 @@ clean:
 # Help
 help:
 	@echo "Android:"
-	@echo "  make build-android              Build debug APK"
-	@echo "  make install-android             Install on default/single device"
-	@echo "  make install-android DEVICE=xyz  Install on specific device"
-	@echo "  make install-android-all         Install on ALL connected devices"
-	@echo "  make launch-android              Launch app on default device"
-	@echo "  make launch-android-all          Launch app on ALL connected devices"
+	@echo "  make build-android                       Build debug APK"
+	@echo "  make build-android-release                Build release APK"
+	@echo "  make install-android                      Install debug on default device"
+	@echo "  make install-android MODE=release          Install release on default device"
+	@echo "  make install-android DEVICE=xyz            Install on specific device"
+	@echo "  make install-android-all                   Install on ALL connected devices"
+	@echo "  make install-android-all MODE=release      Install release on ALL devices"
+	@echo "  make launch-android                        Launch app on default device"
+	@echo "  make launch-android-all                    Launch app on ALL connected devices"
 	@echo ""
 	@echo "Backend:"
 	@echo "  make build-backend               Build Go backend"

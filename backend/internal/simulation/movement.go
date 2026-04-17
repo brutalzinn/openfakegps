@@ -29,6 +29,32 @@ func advancePosition(sim *Simulation, dt time.Duration) Position {
 		}
 	}
 
+	// Check if we are holding at a stop waypoint.
+	if !sim.stopUntil.IsZero() {
+		if time.Now().Before(sim.stopUntil) {
+			// Still holding — return current position with zero speed.
+			pos := sim.CurrentPos
+			pos.Speed = 0
+			pos.Timestamp = time.Now()
+			return pos
+		}
+		// Stop duration elapsed — resume.
+		sim.stopUntil = time.Time{}
+	}
+
+	// Check if we just arrived at a stop waypoint.
+	for _, stop := range sim.Config.Stops {
+		if sim.waypointIdx == stop.WaypointIndex && !sim.completedStops[stop.WaypointIndex] {
+			sim.completedStops[stop.WaypointIndex] = true
+			sim.stopUntil = time.Now().Add(stop.Duration)
+			sim.currentSpeed = 0
+			pos := sim.CurrentPos
+			pos.Speed = 0
+			pos.Timestamp = time.Now()
+			return pos
+		}
+	}
+
 	dtSec := dt.Seconds()
 
 	// Compute the desired target speed considering turns, stops, and end-of-route.
@@ -64,6 +90,11 @@ func advancePosition(sim *Simulation, dt time.Duration) Position {
 			dist -= remaining
 			sim.waypointIdx++
 			sim.segmentFrac = 0
+
+			// Stop advancing if we hit a stop waypoint.
+			if isStopWaypoint(sim, sim.waypointIdx) {
+				break
+			}
 		}
 	}
 
@@ -244,6 +275,17 @@ func distanceToWaypoint(sim *Simulation, targetIdx int) float64 {
 	}
 
 	return dist
+}
+
+// isStopWaypoint returns true if the given waypoint index has a planned stop
+// that hasn't been completed yet.
+func isStopWaypoint(sim *Simulation, idx int) bool {
+	for _, stop := range sim.Config.Stops {
+		if stop.WaypointIndex == idx && !sim.completedStops[idx] {
+			return true
+		}
+	}
+	return false
 }
 
 // progress returns a value from 0.0 to 1.0 indicating how far along the route

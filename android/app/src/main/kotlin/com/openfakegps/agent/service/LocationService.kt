@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.openfakegps.agent.App
 import com.openfakegps.agent.MainActivity
 import com.openfakegps.agent.R
 import com.openfakegps.agent.grpc.AgentCallback
@@ -44,6 +45,9 @@ class LocationService : Service(), AgentCallback {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        // Reuse the mock location provider registered in Application.onCreate().
+        mockLocationProvider = (application as App).mockLocationProvider
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -67,10 +71,11 @@ class LocationService : Service(), AgentCallback {
     }
 
     private fun startSimulation(host: String, port: Int, agentId: String) {
-        // Initialize mock location provider
-        mockLocationProvider = MockLocationProvider(this)
-        val providerReady = mockLocationProvider?.initialize() ?: false
-        if (!providerReady) {
+        // Ensure mock location provider is initialized.
+        if (mockLocationProvider == null) {
+            mockLocationProvider = MockLocationProvider(this)
+        }
+        if (mockLocationProvider?.initialize() != true) {
             Log.e(TAG, "Failed to initialize mock location provider")
             MainViewModel.shared?.updateConnectionStatus("Mock location not enabled", false)
         }

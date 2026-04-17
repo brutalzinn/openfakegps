@@ -18,6 +18,30 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksFile = System.getenv("KEYSTORE_FILE") ?: findProperty("KEYSTORE_FILE") as String?
+            if (ksFile != null) {
+                storeFile = file(ksFile)
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: findProperty("KEYSTORE_PASSWORD") as String?
+                keyAlias = System.getenv("KEY_ALIAS") ?: findProperty("KEY_ALIAS") as String?
+                keyPassword = System.getenv("KEY_PASSWORD") ?: findProperty("KEY_PASSWORD") as String?
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning?.storeFile != null) {
+                signingConfig = releaseSigning
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
+        }
+    }
+
     buildFeatures {
         viewBinding = true
     }
@@ -91,4 +115,7 @@ dependencies {
 
     // Protobuf
     implementation("com.google.protobuf:protobuf-kotlin-lite:4.28.2")
+
+    // Google Play Services Location (for FusedLocationProviderClient mock)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }
