@@ -45,6 +45,9 @@ type Config struct {
 	UpdateInterval time.Duration // default 1s
 	NoiseMeters    float64       // GPS noise radius, default 2.0
 	Stops          []StopConfig  // optional planned stops
+	AccelMps2      float64       // acceleration in m/s², default 2.5
+	DecelMps2      float64       // deceleration in m/s², default 3.0
+	BearingSmooth  float64       // bearing smoothing factor 0-1, default 0.3 (0=snap, 1=no change)
 }
 
 // StopConfig defines a planned stop at a waypoint.
@@ -72,12 +75,14 @@ type Simulation struct {
 	DeviceID string // assigned device agent ID
 
 	// Internal fields for tracking progress along the route.
-	waypointIdx int
-	segmentFrac float64
-	mu          sync.RWMutex
-	cancel      context.CancelFunc
-	done        chan struct{}
-	prevBearing float64
+	waypointIdx      int
+	segmentFrac      float64
+	currentSpeed     float64 // actual speed in m/s (used for acceleration ramp)
+	distanceTraveled float64 // total meters traveled along the route
+	mu               sync.RWMutex
+	cancel           context.CancelFunc
+	done             chan struct{}
+	prevBearing      float64
 }
 
 // StatusInfo is a snapshot of a simulation for external consumption.

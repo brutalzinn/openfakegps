@@ -45,6 +45,15 @@ func (e *Engine) CreateSimulation(cfg Config) (*Simulation, error) {
 	if cfg.NoiseMeters <= 0 {
 		cfg.NoiseMeters = 2.0
 	}
+	if cfg.AccelMps2 <= 0 {
+		cfg.AccelMps2 = 2.5
+	}
+	if cfg.DecelMps2 <= 0 {
+		cfg.DecelMps2 = 3.0
+	}
+	if cfg.BearingSmooth <= 0 {
+		cfg.BearingSmooth = 0.3
+	}
 
 	sim := &Simulation{
 		Config: cfg,

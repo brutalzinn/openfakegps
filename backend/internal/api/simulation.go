@@ -20,10 +20,13 @@ type createSimulationRequest struct {
 	SpeedKmh       *float64 `json:"speed_kmh,omitempty"`  // speed in km/h (converted to m/s internally)
 	UpdateInterval string   `json:"update_interval"`      // e.g. "1s"
 	NoiseMeters    float64  `json:"noise_meters"`
-	Stops          []struct {
+	Stops []struct {
 		WaypointIndex int    `json:"waypoint_index"`
 		Duration      string `json:"duration"`
 	} `json:"stops"`
+	AccelMps2     *float64 `json:"accel_mps2,omitempty"`     // acceleration m/s², default 2.5
+	DecelMps2     *float64 `json:"decel_mps2,omitempty"`     // deceleration m/s², default 3.0
+	BearingSmooth *float64 `json:"bearing_smooth,omitempty"` // 0-1, default 0.3
 }
 
 func (s *Server) createSimulation(w http.ResponseWriter, r *http.Request) {
@@ -96,12 +99,26 @@ func (s *Server) createSimulation(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	var accel, decel, bearingSmooth float64
+	if req.AccelMps2 != nil {
+		accel = *req.AccelMps2
+	}
+	if req.DecelMps2 != nil {
+		decel = *req.DecelMps2
+	}
+	if req.BearingSmooth != nil {
+		bearingSmooth = *req.BearingSmooth
+	}
+
 	cfg := simulation.Config{
 		Route:          waypoints,
 		SpeedMps:       speedMps,
 		UpdateInterval: interval,
 		NoiseMeters:    req.NoiseMeters,
 		Stops:          stops,
+		AccelMps2:      accel,
+		DecelMps2:      decel,
+		BearingSmooth:  bearingSmooth,
 	}
 
 	sim, err := s.engine.CreateSimulation(cfg)

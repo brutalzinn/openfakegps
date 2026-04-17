@@ -93,6 +93,7 @@ Swagger UI: `http://localhost:3000/swagger`
 | POST | /simulations/{id}/pause | Pause simulation |
 | POST | /simulations/{id}/resume | Resume simulation |
 | POST | /simulations/{id}/stop | Stop simulation |
+| POST | /simulations/{id}/position | Set lat/lon/speed/heading manually |
 | GET | /devices | List connected devices |
 | GET | /devices/{id} | Get device details |
 | POST | /assignments | Manual assign (sim_id + device_id) |

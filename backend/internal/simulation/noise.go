@@ -27,5 +27,11 @@ func addNoise(pos Position, radiusMeters float64) Position {
 	// Vary accuracy slightly: between 1.0 and radiusMeters*2.
 	pos.Accuracy = 1.0 + rand.Float64()*(radiusMeters*2-1.0)
 
+	// Speed noise: add gaussian-like jitter (±0.5 m/s) when moving.
+	if pos.Speed > 0 {
+		speedNoise := (rand.Float64()*2 - 1) * 0.5 // uniform ±0.5 m/s
+		pos.Speed = math.Max(0, pos.Speed+speedNoise)
+	}
+
 	return pos
 }
