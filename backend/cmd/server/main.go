@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/openfakegps/openfakegps/backend/internal/api"
 	"github.com/openfakegps/openfakegps/backend/internal/grpcserver"
@@ -46,8 +47,17 @@ func main() {
 	engine := simulation.NewEngine(locationCB)
 	orch := orchestration.NewOrchestrator(registry, engine)
 
-	// gRPC server.
-	grpcSrv := grpc.NewServer()
+	// gRPC server with keepalive to detect dead connections.
+	grpcSrv := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    15 * time.Second,
+			Timeout: 5 * time.Second,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	grpcHandler := grpcserver.NewServer(orch, registry)
 	grpcHandler.Register(grpcSrv)
 

@@ -17,7 +17,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.openfakegps.agent.databinding.ActivityMainBinding
 import com.openfakegps.agent.service.LocationService
 import com.openfakegps.agent.ui.MainViewModel
-import java.util.UUID
+import android.annotation.SuppressLint
+import android.util.Log
 
 class MainActivity : AppCompatActivity() {
 
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
+        setupAgentId()
         updateSetupCard()
         autoConnectIfReady()
     }
@@ -62,13 +64,71 @@ class MainActivity : AppCompatActivity() {
         saveServerConfig()
     }
 
+    @SuppressLint("HardwareIds")
     private fun setupAgentId() {
-        var agentId = prefs.getString("agent_id", null)
-        if (agentId == null) {
-            agentId = "${Build.MODEL}-${UUID.randomUUID().toString().take(8)}"
-            prefs.edit().putString("agent_id", agentId).apply()
+        // Check if serial was passed via intent extra (from adb shell am start --es)
+        val intentSerial = intent?.getStringExtra(EXTRA_SERIAL)
+        if (!intentSerial.isNullOrBlank()) {
+            Log.d(TAG, "Serial from intent extra: $intentSerial")
+            prefs.edit().putString("agent_id", intentSerial).apply()
+            binding.textAgentId.text = intentSerial
+            return
         }
-        binding.textAgentId.text = agentId
+
+        val serial = getDeviceSerial()
+        Log.d(TAG, "getDeviceSerial() returned: $serial")
+        if (serial != null) {
+            prefs.edit().putString("agent_id", serial).apply()
+            binding.textAgentId.text = serial
+        } else {
+            val cached = prefs.getString("agent_id", null)
+            binding.textAgentId.text = cached ?: "Pending permission…"
+        }
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
+        const val EXTRA_SERIAL = "device_serial"
+    }
+
+    @SuppressLint("HardwareIds")
+    private fun getDeviceSerial(): String? {
+        // Try Build.getSerial() (needs READ_PHONE_STATE)
+        try {
+            val hasPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+            Log.d(TAG, "READ_PHONE_STATE granted: $hasPerm")
+            if (hasPerm) {
+                val serial = Build.getSerial()
+                Log.d(TAG, "Build.getSerial() = '$serial'")
+                if (serial.isNotEmpty() && serial != "unknown") return serial
+            }
+        } catch (e: SecurityException) {
+            Log.d(TAG, "Build.getSerial() SecurityException: ${e.message}")
+        }
+
+        // Fallback: getprop ro.serialno — same value shown by adb devices
+        try {
+            val process = ProcessBuilder("getprop", "ro.serialno").start()
+            val serial = process.inputStream.bufferedReader().readText().trim()
+            val exitCode = process.waitFor()
+            Log.d(TAG, "getprop ro.serialno = '$serial' (exit=$exitCode)")
+            if (serial.isNotEmpty() && serial != "unknown") return serial
+        } catch (e: Exception) {
+            Log.d(TAG, "getprop failed: ${e.message}")
+        }
+
+        // Fallback: SystemProperties via reflection
+        try {
+            val clazz = Class.forName("android.os.SystemProperties")
+            val get = clazz.getMethod("get", String::class.java, String::class.java)
+            val serial = get.invoke(null, "ro.serialno", "") as String
+            Log.d(TAG, "SystemProperties.get(ro.serialno) = '$serial'")
+            if (serial.isNotEmpty() && serial != "unknown") return serial
+        } catch (e: Exception) {
+            Log.d(TAG, "SystemProperties failed: ${e.message}")
+        }
+
+        return null
     }
 
     private fun setupUI() {
@@ -292,7 +352,8 @@ class MainActivity : AppCompatActivity() {
     private fun requestPermissions() {
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)

@@ -56,9 +56,19 @@ func (s *Server) setDevicePosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dev, ok := s.registry.Get(req.DeviceID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "device not found")
+		return
+	}
+	if dev.Status == "disconnected" {
+		writeError(w, http.StatusConflict, "device is disconnected, wait for it to reconnect")
+		return
+	}
+
 	stream := s.registry.GetStream(req.DeviceID)
 	if stream == nil {
-		writeError(w, http.StatusNotFound, "device not connected")
+		writeError(w, http.StatusNotFound, "device not connected (no active stream)")
 		return
 	}
 

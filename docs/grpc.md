@@ -27,13 +27,15 @@ First message **must** be a `RegisterRequest`:
 ```
 AgentMessage {
   register: RegisterRequest {
-    agent_id: "unique-device-id"
-    device_name: "Pixel 7"
-    device_model: "pixel7"
-    capabilities: ["mock_location"]
+    agent_id: "08291JEC212687"
+    device_name: "sunfish"
+    device_model: "Pixel 4a"
+    capabilities: ["mock_location", "gps_simulation"]
   }
 }
 ```
+
+> **Note:** The `agent_id` is the device's ADB serial number (same value from `adb devices`). It is passed to the app via intent extra: `--es device_serial <SERIAL>`.
 
 Server responds with `RegisterResponse`:
 
@@ -65,7 +67,7 @@ Agent reports state changes:
 ```
 AgentMessage {
   status_update: StatusUpdate {
-    agent_id: "unique-device-id"
+    agent_id: "08291JEC212687"
     status: DEVICE_STATUS_SIMULATING
     message: "GPS injection active"
   }

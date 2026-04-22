@@ -105,6 +105,9 @@ class AgentClient(
         channel = ManagedChannelBuilder
             .forAddress(host, port)
             .usePlaintext()
+            .keepAliveWithoutCalls(true)
+            .keepAliveTime(15, TimeUnit.SECONDS)
+            .keepAliveTimeout(10, TimeUnit.SECONDS)
             .build()
 
         val stub = AgentServiceGrpcKt.AgentServiceCoroutineStub(channel!!)

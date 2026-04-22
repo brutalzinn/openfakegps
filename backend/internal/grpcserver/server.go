@@ -108,6 +108,10 @@ func (s *Server) Connect(stream fakegpsv1.AgentService_ConnectServer) error {
 		}
 	}
 
+	// Clear the stream reference so no one tries to send on a dead transport.
+	sw.Close()
+	s.registry.SetStream(agentID, nil)
+
 	// Clean up on disconnect.
 	s.orchestrator.HandleDisconnect(agentID)
 	return nil
@@ -117,16 +121,28 @@ func (s *Server) Connect(stream fakegpsv1.AgentService_ConnectServer) error {
 type streamWrapper struct {
 	stream fakegpsv1.AgentService_ConnectServer
 	mu     sync.Mutex
+	closed bool
 }
 
 func newStreamWrapper(stream fakegpsv1.AgentService_ConnectServer) *streamWrapper {
 	return &streamWrapper{stream: stream}
 }
 
+// Close marks the stream as closed so future sends fail fast.
+func (sw *streamWrapper) Close() {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	sw.closed = true
+}
+
 // SendLocationUpdate sends a location update to the connected agent.
 func (sw *streamWrapper) SendLocationUpdate(simID string, pos simulation.Position) error {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
+
+	if sw.closed {
+		return fmt.Errorf("stream closed")
+	}
 
 	return sw.stream.Send(&fakegpsv1.ServerMessage{
 		Payload: &fakegpsv1.ServerMessage_LocationUpdate{
@@ -148,6 +164,10 @@ func (sw *streamWrapper) SendLocationUpdate(simID string, pos simulation.Positio
 func (sw *streamWrapper) SendSimulationCommand(action string, simID string) error {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
+
+	if sw.closed {
+		return fmt.Errorf("stream closed")
+	}
 
 	var protoAction fakegpsv1.SimulationAction
 	switch action {

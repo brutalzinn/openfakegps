@@ -129,16 +129,18 @@ GET /devices
 ```json
 [
   {
-    "agent_id": "device-uuid",
-    "device_name": "Pixel 7",
-    "model": "Pixel 7",
-    "capabilities": [],
+    "agent_id": "08291JEC212687",
+    "device_name": "sunfish",
+    "model": "Pixel 4a",
+    "capabilities": ["mock_location", "gps_simulation"],
     "status": "idle",
     "assigned_sim": "",
-    "last_seen": "2024-01-01T00:00:00Z"
+    "last_seen": "2026-04-20T17:20:51Z"
   }
 ]
 ```
+
+> **Note:** The `agent_id` is the device's ADB serial number (same value from `adb devices`). Use it as `device_id` when assigning simulations.
 
 ### Get Device
 
@@ -162,16 +164,18 @@ POST /assignments
 ```json
 {
   "sim_id": "simulation-uuid",
-  "device_id": "agent-uuid"
+  "device_id": "08291JEC212687"
 }
 ```
+
+The `device_id` is the ADB serial number of the target device.
 
 **Response (200):**
 ```json
 {
   "status": "assigned",
   "sim_id": "simulation-uuid",
-  "device_id": "agent-uuid"
+  "device_id": "08291JEC212687"
 }
 ```
 
@@ -195,7 +199,7 @@ Finds the first idle device and assigns the simulation to it.
 {
   "status": "assigned",
   "sim_id": "simulation-uuid",
-  "device_id": "auto-selected-agent-uuid"
+  "device_id": "11e79168"
 }
 ```
 
